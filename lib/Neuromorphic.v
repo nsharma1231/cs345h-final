@@ -26,18 +26,17 @@ Example OR with leak
 ("A", "A|B", 1, 1)
 ("B", "A|B", 1, 1)
 *)
-
+Add LoadPath "lib" as Lib.
 Require Import Arith List String Logic ZArith.
 Import ListNotations.
 Open Scope Z_scope.
 Open Scope string_scope.
 
-Module Leak.
+Module Neuromorphic.
 (*
 Some assumptions we will make:
     1) All synapses have delay = 1
     2) Potential starts at 0
-    3) Neurons leak to default potential after one timestep
 *)
 
 (* the only constructor for neuron takes a name and threshold *)
@@ -136,107 +135,8 @@ Definition get_graph (s : state) : graph :=
     | pair _ x => x
     end.
 
-(*
-Given an input state,
-step one timestep and return resulting state
-    1) Identify all neurons above threshold
-    2) Fire neurons we found
-*)
-Fixpoint step' (p : potentials) (g : graph) : potentials :=
-    match g with
-    | [] => [] (* no synapses left to fire *)
-    | (n1, n2, w) :: g' =>
-        if decode p n1 then
-        add_potential (step' p g') n2 w (* n1 should fire this synapse, add weight to n2 *)
-        else step' p g' (* this synapse is not fired *)
-    end.
-Definition step (st : state) : state :=
-    pair (step' (get_potentials st) (get_graph st)) (get_graph st).
-
-Fixpoint step_n (n: nat) (st: state) : state :=
-    match n with
-    | O => st
-    | S n' => step_n n' (step st)
-    end.
-
 (* update the potential of a neuron in a given state *)
 Definition update_state (st : state) (x : Neuron) (p : Z) : state :=
     pair (set_potential (get_potentials st) x p) (get_graph st).
 
-(*
-Given a list of all neurons, a initial state, and an output neuron, compute the
-result in `steps` number of steps. If out has potential >= threshold, result is true,
-else result is false
-*)
-Definition in1 := neuron "A" 1.
-Definition in2 := neuron "B" 1.
-Definition inputs (a b : bool) := encode (encode [] in1 a) in2 b.
-
-Definition eval (steps : nat) (st : state) (out : Neuron) : bool :=
-    decode (get_potentials (step_n steps st)) out.
-
-Module or.
-Definition out := neuron "A|B" 1.
-Definition synapses := set_synapse (set_synapse [] in1 out 1) in2 out 1.
-Definition initial_state (a b : bool) := pair (inputs a b) synapses.
-
-Example computes_in_one_step: forall a b, eval 1 (initial_state a b) out = orb a b.
-Proof. destruct a, b; auto. Qed.
-Example clears_in_two_steps: forall a b, eval 2 (initial_state a b) out = false.
-Proof. destruct a, b; auto. Qed.
-Example potential_leaks:
-    forall (a b : bool) (n : Neuron), plookup (get_potentials (step_n 2 (initial_state a b))) n = 0.
-Proof. destruct a, b; auto. Qed.
-End or.
-
-Module and.
-Definition out := neuron "A&B" 2.
-Definition synapses := set_synapse (set_synapse [] in1 out 1) in2 out 1.
-Definition initial_state (a b : bool) := pair (inputs a b) synapses.
-
-Example computes_in_one_step: forall a b, eval 1 (initial_state a b) out = andb a b.
-Proof. destruct a, b; auto. Qed.
-Example clears_in_two_steps: forall a b, eval 2 (initial_state a b) out = false.
-Proof. destruct a, b; auto. Qed.
-Example potential_leaks:
-    forall (a b : bool) (n : Neuron), plookup (get_potentials (step_n 2 (initial_state a b))) n = 0.
-Proof. destruct a, b; auto. Qed.
-
-(*
-We want to show that computing (a, b) = (1, 0) and (a, b) = (0, 1) one after the other results in
-correct output due to potentials leaking. i.e. node "A&B" leaks the half potential of 1 before it
-is fired again
-*)
-Example and_leak_correct:
-    eval 1 (initial_state true false) out = false /\
-    eval 1 (update_state (step (initial_state true false)) in2 1) out = false.
-Proof. auto. Qed.
-Example and_leak_correct_reverse:
-    eval 1 (initial_state false true) out = false /\
-    eval 1 (update_state (step (initial_state false true)) in1 1) out = false.
-Proof. auto. Qed.
-End and.
-
-Module xor.
-Definition h1 := neuron "A&~B" 1.
-Definition h2 := neuron "B&~A" 1.
-Definition out := neuron "A^B" 1.
-Definition synapses := set_synapse (set_synapse (set_synapse (set_synapse (set_synapse (set_synapse []
-                        in1 h1 1)
-                        in1 h2 (-1))
-                        in2 h1 (-1))
-                        in2 h2 1)
-                        h1 out 1)
-                        h2 out 1.
-Definition initial_state (a b : bool) := pair (inputs a b) synapses.
-
-Example computes_in_two_steps: forall a b, eval 2 (initial_state a b) out = xorb a b.
-Proof. destruct a, b; auto. Qed.
-Example clears_in_three_steps: forall a b, eval 3 (initial_state a b) out = false.
-Proof. destruct a, b; auto. Qed.
-Example potential_leaks:
-    forall (a b : bool) (n : Neuron), plookup (get_potentials (step_n 3 (initial_state a b))) n = 0.
-Proof. destruct a, b; auto. Qed.
-End xor.
-
-End Leak.
+End Neuromorphic.
